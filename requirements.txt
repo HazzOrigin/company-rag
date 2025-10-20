@@ -1,0 +1,6 @@
+google-cloud-bigquery
+openai==1.*
+pinecone-client==5.*
+fastapi
+uvicorn
+tenacity
