@@ -1,0 +1,49 @@
+name: Deploy API (Cloud Run)
+
+on:
+  push:
+    branches: [ "main" ]
+    paths:
+      - "app.py"
+      - "requirements.txt"
+      - "Dockerfile"
+      - ".github/workflows/deploy-cloud-run.yml"
+
+jobs:
+  deploy:
+    runs-on: ubuntu-latest
+    permissions:
+      contents: read
+      id-token: write
+
+    steps:
+      - uses: actions/checkout@v4
+
+      - id: auth
+        name: Auth to GCP
+        uses: google-github-actions/auth@v2
+        with:
+          workload_identity_provider: ${{ secrets.GCP_WIF_PROVIDER }}
+          service_account: ${{ secrets.GCP_SERVICE_ACCOUNT }}
+
+      - name: Setup gcloud
+        uses: google-github-actions/setup-gcloud@v2
+
+      - name: Configure Docker auth
+        run: gcloud auth configure-docker us-central1-docker.pkg.dev -q
+
+      - name: Build & Push
+        run: |
+          IMAGE=us-central1-docker.pkg.dev/${{ secrets.GCP_PROJECT }}/containers/company-rag:${{ github.sha }}
+          gcloud builds submit --tag $IMAGE
+
+      - name: Deploy to Cloud Run
+        run: |
+          IMAGE=us-central1-docker.pkg.dev/${{ secrets.GCP_PROJECT }}/containers/company-rag:${{ github.sha }}
+          gcloud run deploy company-rag \
+            --image $IMAGE \
+            --region us-central1 \
+            --allow-unauthenticated=false \
+            --set-env-vars GCP_PROJECT=${{ secrets.GCP_PROJECT }},BQ_DATASET=analytics,PINECONE_INDEX=company-knowledge \
+            --set-secrets OPENAI_API_KEY=OPENAI_API_KEY:latest,PINECONE_API_KEY=PINECONE_API_KEY:latest \
+            --platform managed
